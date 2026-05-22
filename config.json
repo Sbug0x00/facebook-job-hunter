@@ -1,0 +1,63 @@
+{
+  "facebook": {
+    "group_id": "YOUR_GROUP_ID_HERE",
+    "access_token": "YOUR_ACCESS_TOKEN_HERE"
+  },
+  "contact": {
+    "phone": "0825779413"
+  },
+  "service": {
+    "name": "Dịch vụ Xe Du Lịch & Taxi Ghép Xe",
+    "type": "taxi",
+    "base_location": "Phan Rang"
+  },
+  "locations": [
+    {
+      "province": "Phan Rang",
+      "key_destinations": [
+        "TP.HCM",
+        "Nha Trang",
+        "Dalat",
+        "Cần Thơ",
+        "Vĩnh Long",
+        "Bến Tre",
+        "Trà Vinh",
+        "Sóc Trăng",
+        "Cà Mau",
+        "Bạc Liêu",
+        "Quy Nhơn",
+        "Tuy Hòa"
+      ]
+    }
+  ],
+  "post_settings": {
+    "schedule_time": "07:00",
+    "schedule_timezone": "Asia/Ho_Chi_Minh",
+    "hashtags": [
+      "#XeDuLichPhanRang",
+      "#GheXe",
+      "#TaxiGheXe",
+      "#GheXeGiaRe",
+      "#XeAnToan",
+      "#PhanRang"
+    ],
+    "price_range": {
+      "min": 100000,
+      "max": 250000
+    },
+    "passengers": "2-4"
+  },
+  "content_template": {
+    "greeting": "🚗 CHUYẾN XE HOT HÔM NAY 🚗",
+    "route_format": "Phan Rang ➜ {destination}",
+    "details": [
+      "💰 Giá cực rẻ",
+      "👥 Ghép tối {passengers} người",
+      "⏰ Khởi hành: Linh hoạt",
+      "✨ Xe sạch, tài xế chuyên nghiệp",
+      "🛡️ An toàn đầy đủ"
+    ],
+    "cta": "📞 Gọi ngay: 0825779413",
+    "urgency": "Chỗ còn: Giới hạn!"
+  }
+}
