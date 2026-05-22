@@ -66,38 +66,11 @@ def create_post_content():
         'image_url': get_random_image_url()
     }
 
-def post_to_facebook(post_data):
-    """Post lên Facebook Group"""
-    group_id = config['facebook']['group_id']
-    access_token = config['facebook']['access_token']
-    
-    if group_id == "YOUR_GROUP_ID_HERE" or access_token == "YOUR_ACCESS_TOKEN_HERE":
-        print("⚠️  CẢNH BÁO: Cần điền Group ID và Access Token vào config.json")
-        print(f"\n📝 Nội dung sẽ post:\n{post_data['content']}")
-        return False
-    
-    try:
-        url = f"https://graph.facebook.com/v18.0/{group_id}/feed"
-        
-        payload = {
-            'message': post_data['content'],
-            'link': post_data['image_url'],
-            'access_token': access_token
-        }
-        
-        response = requests.post(url, data=payload, timeout=10)
-        
-        if response.status_code == 200:
-            print(f"✅ Post thành công lúc {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            print(f"📍 Tuyến: Phan Rang ➜ {post_data['destination']}")
-            print(f"💰 Giá: {post_data['price']:,}đ")
-            return True
-        else:
-            print(f"❌ Lỗi post: {response.status_code} - {response.text}")
-            return False
-    except Exception as e:
-        print(f"❌ Lỗi kết nối: {str(e)}")
-        return False
+def save_post_content(post_data):
+    """Lưu nội dung bài viết vào file để Playwright sử dụng"""
+    with open('post_content.json', 'w', encoding='utf-8') as f:
+        json.dump(post_data, f, ensure_ascii=False, indent=2)
+    print("💾 Đã lưu nội dung bài viết vào post_content.json")
 
 def main():
     print("🚗 Auto-Post System - Phan Rang Taxi Service")
@@ -112,10 +85,10 @@ def main():
     print(post_data['content'])
     print("-" * 50)
     
-    # Post lên Facebook
-    post_to_facebook(post_data)
+    # Lưu vào file
+    save_post_content(post_data)
     
-    print("\n✅ Hoàn thành!")
+    print("\n✅ Hoàn thành tạo nội dung!")
 
 if __name__ == "__main__":
     main()
