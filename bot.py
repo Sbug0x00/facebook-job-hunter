@@ -2,7 +2,6 @@ import os
 import json
 import time
 import random
-import base64
 import requests
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -10,30 +9,116 @@ import google.generativeai as genai
 import g4f
 from playwright.sync_api import sync_playwright
 
-# ==========================================
-# 1. CẤU HÌNH HỆ THỐNG & KẾT NỐI GOOGLE SHEET
-# ==========================================
-def ket_noi_google_sheet():
-    # Giải mã tài khoản dịch vụ Google từ chuỗi Base64 trong GitHub Secrets
-    creds_b64 = os.environ.get("GOOGLE_CREDS_BASE64")
-    creds_json = json.loads(base64.b64decode(creds_b64).decode('utf-8'))
+FILE_ID = "1u0jpBr0cWZQhtVyIUep08TmkGILK0j3qpRYdHWPfRCU"
+
+def ket_noi_sheet():
+    client_email = os.environ.get("GOOGLE_CLIENT_EMAIL")
+    private_key = os.environ.get("GOOGLE_PRIVATE_KEY").replace('\\n', '\n').strip()
+    
+    creds_dict = {
+        "type": "service_account",
+        "client_email": client_email,
+        "private_key": private_key,
+        "token_uri": "https://googleapis.com",
+    }
     
     scope = ["https://google.com", "https://googleapis.com"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
+    sheet = client.open_by_key(FILE_ID)
     
-    # Mở Google Sheet bằng Tên file (Đảm bảo đã share quyền chỉnh sửa cho email tài khoản dịch vụ)
-    sheet = client.open("Bot_Truyen_Kinh_Di")
-    return sheet.worksheet("CauHinh"), sheet.worksheet("KhoTruyen")
+    # Tự động tạo Tab nếu Sheet trống
+    try:
+        ws_cauhinh = sheet.worksheet("CauHinh")
+    except gspread.exceptions.WorksheetNotFound:
+        ws_cauhinh = sheet.add_worksheet(title="CauHinh", rows="100", cols="20")
+        ws_cauhinh.update('A1:E1', [['Cookie_Facebook', 'Ten_Truyen', 'Cot_Truyen', 'Tap_Hien_Tai', 'Tong_So_Tap']])
+        ws_cauhinh.update('A2:E2', [['SỬ DỤNG COOKIE', 'Mật Mã Hội Tam Điểm', 'Học sinh giải mã thư cổ tìm mật thất...', '1', '5']])
+        
+    try:
+        ws_kho = sheet.worksheet("KhoTruyen")
+    except gspread.exceptions.WorksheetNotFound:
+        ws_kho = sheet.add_worksheet(title="KhoTruyen", rows="1000", cols="20")
+        ws_kho.update('A1:D1', [['Tiêu đề', 'Nội dung', 'Trạng thái', 'Thời gian']])
+        
+    return ws_cauhinh, ws_kho
 
-# ==========================================
-# 2. XỬ LÝ SÁNG TÁC ĐA TẦNG (GEMINI + G4F)
-# ==========================================
-def don_dep_vong_chu(text):
-    # Hàm loại bỏ các ký tự định dạng Markdown thừa thãi để text sạch khi lên Facebook
-    bad_chars = ["**", "*", "__", "###", "##"]
-    for char in bad_chars:
-        text = text.replace(char, "")
+def viet_truyen(ten, tap, cot):
+    genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+    model = genai.GenerativeModel('gemini-pro')
+    prompt = f"Viết tiếp Tập {tap} truyện kinh dị '{ten}'. Cốt truyện: {cot}. Phong cách ma thuật hắc ám, kết thúc lửng lơ gây cấn. Khoảng 600 chữ tiếng Việt."
+    
+    try:
+        ban_thao = model.generate_content(prompt).text
+    except Exception:
+        ban_thao = f"Cơn ác mộng tại tu viện cổ lại tiếp diễn ở Tập {tap}. Ký tự cổ bắt đầu rỉ máu..."
+
+    prompt_chuot = f"Biên tập lại văn bản sau theo phong cách u ám, giải mã mật mã bí ẩn của Dan Brown và trường học phù thủy Harry Potter:\n{ban_thao}"
+    try:
+        truyen_hay = g4f.ChatCompletion.create(model=g4f.models.gpt_4, messages=[{"role": "user", "content": prompt_chuot}], provider=g4f.Provider.DuckDuckGo)
+    except Exception:
+        truyen_hay = ban_thao
+
+    for char in ["**", "*", "__", "###", "##"]: truyen_hay = truyen_hay.replace(char, "")
+    return truyen_hay.strip()
+
+def lay_anh(ten):
+    prompt = requests.utils.quote(f"gothic horror scene, mystery symbols, dark magic, related to {ten}")
+    url = f"https://pollinations.ai{prompt}?width=1200&height=630&nologo=true"
+    path = "/tmp/illustration.jpg"
+    with open(path, "wb") as f: f.write(requests.get(url).content)
+    return path
+
+def dang_facebook(tieu_de, noi_dung, anh_path, cookie_str):
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        context.add_cookies(json.loads(cookie_str))
+        page = context.new_page()
+        page.goto("https://facebook.com")
+        
+        if "composer" not in page.content() and "view_photo" not in page.content():
+            browser.close()
+            return False
+            
+        page.click("input[name='view_photo']")
+        time.sleep(random.randint(3, 5))
+        page.fill("textarea[name='xc_message']", f"{tieu_de}\n\n{noi_dung}\n\n#truyenkinhdi #danbrown #harrypotter")
+        page.set_input_files("input[type='file']", file_path=anh_path)
+        time.sleep(random.randint(4, 6))
+        page.click("input[name='view_overview']")
+        time.sleep(3)
+        page.click("input[name='submit']")
+        time.sleep(5)
+        
+        new_cookies = context.cookies()
+        browser.close()
+        return json.dumps(new_cookies)
+
+def main():
+    try:
+        ws_cau_hinh, ws_kho_truyen = ket_noi_sheet()
+        cookie_fb = os.environ.get("FB_COOKIES") if ws_cau_hinh.acell('A2').value == "SỬ DỤNG COOKIE" else ws_cau_hinh.acell('A2').value
+        ten_truyen = ws_cau_hinh.acell('B2').value
+        cot_truyen = ws_cau_hinh.acell('C2').value
+        tap_hien_tai = int(ws_cau_hinh.acell('D2').value)
+        tong_so_tap = int(ws_cau_hinh.acell('E2').value)
+        
+        if tap_hien_tai > tong_so_tap: return
+
+        tieu_de = f"[Tập {tap_hien_tai}/{tong_so_tap}] - {ten_truyen.upper()}"
+        noi_dung = viet_truyen(ten_truyen, tap_hien_tai, cot_truyen)
+        file_anh = lay_anh(ten_truyen)
+        cookie_moi = dang_facebook(tieu_de, noi_dung, file_anh, cookie_fb)
+        
+        if cookie_moi:
+            ws_kho_truyen.append_row([tieu_de, noi_dung, "Thành công", time.strftime("%Y-%m-%d %H:%M:%S")])
+            ws_cau_hinh.update_acell('D2', str(tap_hien_tai + 1))
+            ws_cau_hinh.update_acell('A2', cookie_moi)
+        if os.path.exists(file_anh): os.remove(file_anh)
+    except Exception as e: print(f"Lỗi: {e}")
+
+if __name__ == "__main__": main()
     return text.strip()
 
 def sang_tac_truyen(ten_truyen, tap_hien_tai, cot_truyen):
