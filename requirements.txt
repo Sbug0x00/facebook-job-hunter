@@ -1,2 +1,6 @@
-requests==2.31.0
-playwright==1.40.0
+google-generativeai
+g4f
+gspread
+oauth2client
+playwright
+requests
