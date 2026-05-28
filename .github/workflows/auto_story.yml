@@ -2,38 +2,39 @@ name: Auto Post Horror Story Bot
 
 on:
   schedule:
-    # 12:00 UTC bằng đúng 19:00 tối theo múi giờ Việt Nam (ICT)
-    - cron: '0 12 * * *'
-  workflow_dispatch: # Tạo nút bấm chạy thử thủ công
+    - cron: '0 12 * * *' # Chạy lúc 19:00 tối giờ VN hằng ngày
+  workflow_dispatch:
 
 jobs:
   run-automation-bot:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Lay ma nguon tu Repository
+    - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Cai dat moi truong Python
+    - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
 
-    # Bước bổ sung: Cài đặt Node.js phiên bản LTS mới nhất để xóa cảnh báo Deprecated
-    - name: Cai dat Node.js de ho tro Playwright
+    - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
         node-version: 'lts/*'
 
-    - name: Cai dat cac thu vien Python
+    - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
-
-    # Bước nâng cấp: Cài đặt Chromium kèm theo toàn bộ thư viện hệ thống chống treo ngầm
-    - name: Cai dat Trinh duyet ngam va Dependencies
-      run: |
+        pip install google-generativeai g4f gspread oauth2client playwright requests
         npx playwright install chromium --with-deps
+
+    - name: Run Bot
+      env:
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        GOOGLE_CLIENT_EMAIL: ${{ secrets.GOOGLE_CLIENT_EMAIL }}
+        GOOGLE_PRIVATE_KEY: ${{ secrets.GOOGLE_PRIVATE_KEY }}
+        FB_COOKIES: ${{ secrets.FB_COOKIES }}
+      run: python bot.py
 
     - name: Khoi chay Bot dang bai
       env:
