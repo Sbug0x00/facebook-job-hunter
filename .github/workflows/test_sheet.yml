@@ -1,0 +1,25 @@
+name: Test Google Sheet Connection
+
+on:
+  workflow_dispatch: # Tạo nút bấm chạy thủ công để kiểm tra nhanh
+
+jobs:
+  check-connection:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install gspread
+      run: pip install gspread oauth2client
+
+    - name: Run Test Script
+      env:
+        GOOGLE_CREDS_BASE64: ${{ secrets.GOOGLE_CREDS_BASE64 }}
+      run: python test_sheet.py
