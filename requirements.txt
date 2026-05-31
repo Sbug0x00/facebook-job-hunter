@@ -1,6 +1,0 @@
-google-generativeai
-g4f
-gspread
-oauth2client
-playwright
-requests
