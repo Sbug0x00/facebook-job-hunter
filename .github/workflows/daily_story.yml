@@ -2,18 +2,22 @@ name: Tạo Truyện Ma Tự Động
 
 on:
   schedule:
-    # Chạy mỗi ngày lúc 7:00 sáng giờ Việt Nam (UTC+7 = 00:00 UTC)
+    # 7:00 sáng giờ Việt Nam (UTC+7) = 00:00 UTC
     - cron: '0 0 * * *'
-  workflow_dispatch:  # Cho phép chạy thủ công khi cần
+  workflow_dispatch:
 
 jobs:
   generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -28,10 +32,12 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          GOOGLE_CREDS_JSON: ${{ secrets.GOOGLE_CREDS_JSON }}
-          SHEET_ID: ${{ secrets.SHEET_ID }}
         run: python src/generate_story.py
 
-      - name: Thông báo nếu lỗi
-        if: failure()
-        run: echo "❌ Có lỗi xảy ra! Kiểm tra logs bên trên."
+      - name: Commit vào repo
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "TruyenMaBot"
+          git add truyen/ hoan-thanh/
+          git diff --staged --quiet || git commit -m "📖 $(date +'%d/%m/%Y') - Cập nhật truyện mới"
+          git push
