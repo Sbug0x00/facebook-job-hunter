@@ -11,12 +11,22 @@ import os, re, json, zipfile, random, datetime, time, requests, shutil
 from pathlib import Path
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
-GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
-GROQ_API_KEY   = os.environ["GROQ_API_KEY"]
+GROQ_API_KEY = os.environ["GROQ_API_KEY"]
 
-GEMINI_URL = (
+# Hỗ trợ tối đa 3 Gemini key luân phiên
+# Key 2 và 3 là tùy chọn — có bao nhiêu dùng bấy nhiêu
+_GEMINI_KEYS = [k for k in [
+    os.environ.get("GEMINI_API_KEY"),
+    os.environ.get("GEMINI_API_KEY_2"),
+    os.environ.get("GEMINI_API_KEY_3"),
+] if k]
+
+if not _GEMINI_KEYS:
+    raise RuntimeError("Cần ít nhất 1 GEMINI_API_KEY trong secrets!")
+
+GEMINI_BASE_URL = (
     "https://generativelanguage.googleapis.com/v1beta/models/"
-    "gemini-2.0-flash:generateContent?key=" + GEMINI_API_KEY
+    "gemini-2.0-flash:generateContent?key="
 )
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
@@ -26,35 +36,67 @@ NGAN_DIR       = Path("truyen/ngan")
 HOAN_THANH_DIR = Path("hoan-thanh")
 STATE_FILE     = Path("truyen/state.json")
 
-MAX_RETRIES  = 3
-RETRY_WAIT   = 45   # giây chờ khi 429
+MAX_RETRIES = 3
 
 # ─── AI CALLS ─────────────────────────────────────────────────────────────────
 
+# Theo dõi key đang dùng
+_key_index = 0
+
 def call_gemini(prompt: str) -> str:
-    """Gọi Gemini — KHÔNG dùng google_search để tránh timeout."""
+    """
+    Gọi Gemini với luân phiên key tự động.
+    Bị 429 → chuyển key tiếp theo ngay lập tức, không cần chờ.
+    """
+    global _key_index
+
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0.92, "maxOutputTokens": 3000},
     }
-    for attempt in range(MAX_RETRIES):
+
+    # Thử tất cả keys × MAX_RETRIES
+    total_attempts = len(_GEMINI_KEYS) * MAX_RETRIES
+
+    for attempt in range(total_attempts):
+        key  = _GEMINI_KEYS[_key_index % len(_GEMINI_KEYS)]
+        url  = GEMINI_BASE_URL + key
+        k_no = (_key_index % len(_GEMINI_KEYS)) + 1
+
         try:
-            r = requests.post(GEMINI_URL, json=payload, timeout=60)
+            r = requests.post(url, json=payload, timeout=90)
+
             if r.status_code == 429:
-                wait = RETRY_WAIT * (attempt + 1)
-                print(f"   ⏳ Gemini 429, chờ {wait}s...")
-                time.sleep(wait)
+                print(f"   ⏳ Key {k_no} bị 429 → chuyển key tiếp...")
+                _key_index += 1
+
+                # Nếu đã thử hết tất cả keys 1 vòng → chờ 65s rồi thử lại
+                if _key_index % len(_GEMINI_KEYS) == 0:
+                    print(f"   ⏳ Hết keys, chờ 65s để reset quota...")
+                    time.sleep(65)
                 continue
+
             r.raise_for_status()
-            parts = r.json()["candidates"][0]["content"]["parts"]
-            return " ".join(p.get("text","") for p in parts if "text" in p).strip()
+            parts  = r.json()["candidates"][0]["content"]["parts"]
+            result = " ".join(p.get("text","") for p in parts if "text" in p).strip()
+            if not result:
+                raise ValueError("Gemini trả về rỗng")
+
+            # Chuyển key cho lần gọi tiếp theo (phân tải đều)
+            _key_index += 1
+            print(f"   ✓ Gemini key {k_no} thành công")
+            return result
+
+        except requests.exceptions.Timeout:
+            print(f"   ⚠️ Key {k_no} timeout, thử key khác...")
+            _key_index += 1
+            time.sleep(5)
         except Exception as e:
-            if attempt < MAX_RETRIES - 1:
-                print(f"   ⚠️ Gemini lỗi: {e}, thử lại...")
-                time.sleep(RETRY_WAIT)
-            else:
-                raise
-    raise RuntimeError("Gemini thất bại")
+            print(f"   ⚠️ Key {k_no} lỗi: {e}, thử key khác...")
+            _key_index += 1
+            time.sleep(5)
+
+    raise RuntimeError("Tất cả Gemini keys đều thất bại!")
 
 
 def call_groq(prompt: str) -> str:
@@ -421,8 +463,6 @@ def main():
     if not state.get("story"):
         print("📚 Research & thiết kế bộ truyện mới...")
         story = research_and_design_story()
-        # Delay giữa 2 lần gọi Gemini
-        time.sleep(10)
         bible = build_character_bible(story)
         state.update({"story": story, "character_bible": bible,
                       "current_chapter": 0, "plot_threads": []})
@@ -447,7 +487,8 @@ def main():
         build_chapter_prompt(story, chapter_num, prev_summary,
                              daily_trend, bible, plot_threads)
     )
-    time.sleep(8)  # Delay nhỏ giữa Gemini và Groq
+
+    # ── Bước 2: Groq polish + check cliffhanger ──────────────────────────────
 
     # ── Bước 2: Groq polish + check cliffhanger (gộp 1 lần) ────────────────
     print("   ✨ Groq polish & cliffhanger...")
@@ -476,7 +517,6 @@ def main():
         print("🔍 Research bộ truyện mới...")
         time.sleep(10)
         new_story = research_and_design_story()
-        time.sleep(10)
         new_bible = build_character_bible(new_story)
         state.update({"story": new_story, "character_bible": new_bible,
                       "current_chapter": 0, "plot_threads": []})
@@ -510,10 +550,7 @@ def main():
             state["used_short_themes"] = []
 
         title, concept = random.choice(avail)
-        time.sleep(8)  # Delay trước khi gọi Gemini lần 2
-
         raw_s   = call_gemini(build_short_story_prompt(title, concept, daily_trend))
-        time.sleep(5)
         final_s = call_groq(build_polish_prompt(raw_s, False))
         save_short(title, final_s)
 
